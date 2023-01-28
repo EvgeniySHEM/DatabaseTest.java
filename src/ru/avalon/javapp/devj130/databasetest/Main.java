@@ -6,9 +6,12 @@ import java.util.Arrays;
 public class Main {
     public static void main(String[] args) throws DocumentException {
         DbServer dbServer = new DbServer();
-        Author author = new Author(4, "Hi!", "  vcna vnnv nv ");
+        Document document = new Document(4, "js", "jj", 7);
+        Author author = new Author(7, "Kitt", "dnjs`dvj dvcb");
+        System.out.println(dbServer.deleteAuthor(author));
+//        System.out.println(dbServer.addDocument(document, author));
 
-        dbServer.addAuthor(author);
+//        System.out.println(dbServer.addAuthor(author));
 //        Document document = new Document(4, "bvhb", "bb9990vh", 3);
 //        dbServer.addDocument(document, author);
 //

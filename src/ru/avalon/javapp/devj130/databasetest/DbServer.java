@@ -28,17 +28,21 @@ public class DbServer implements IDbService {
             throw new DocumentException("The author reference is null");
 
         try (Connection connection = DriverManager.getConnection(dbURL, dbUserName, dbPassword)) {
-            Map<Integer, Author> authorsMap = new HashMap<>();
+            Author checkingAuthor = null;
+            try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT * FROM AUTHORS " +
+                    "WHERE ID = ?")) {
+                preparedStatement.setInt(1, author.getAuthor_id());
 
-            try (Statement statement = connection.createStatement();
-                 ResultSet resultSet = statement.executeQuery("SELECT * FROM AUTHORS")) {
-                while (resultSet.next()) {
-                    authorsMap.put(resultSet.getInt("ID"), new Author(resultSet.getInt("ID"),
-                            resultSet.getString("AUTHOR_NAME"), resultSet.getString("NOTES")));
+                try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                    while (resultSet.next()) {
+                        checkingAuthor = new Author(resultSet.getInt("ID"),
+                                resultSet.getString("AUTHOR_NAME"),
+                                resultSet.getString("NOTES"));
+                    }
                 }
             }
 
-            if (!authorsMap.containsKey(author.getAuthor_id())) {
+            if (checkingAuthor == null) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO " +
                         "AUTHORS (ID, AUTHOR_NAME, NOTES) VALUES (?, ?, ?)")) {
                     preparedStatement.setInt(1, author.getAuthor_id());
@@ -49,8 +53,11 @@ public class DbServer implements IDbService {
                 return true;
             }
 
-            if (!authorsMap.get(author.getAuthor_id()).equals(author)) {
+            if (!checkingAuthor.equals(author)) {
                 if (Objects.equals(author.getAuthor(), "")) {
+                    if (author.getNotes().equals(checkingAuthor.getNotes())) {
+                        throw new DocumentException("The fields of the author object are filled in incorrectly");
+                    }
                     try (PreparedStatement preparedStatement = connection.prepareStatement("UPDATE AUTHORS " +
                             "SET NOTES = ? WHERE ID = ?")) {
                         preparedStatement.setString(1, author.getNotes());
@@ -100,20 +107,21 @@ public class DbServer implements IDbService {
             throw new DocumentException("Incorrect data entered");
 
         try (Connection connection = DriverManager.getConnection(dbURL, dbUserName, dbPassword)) {
-            List<Integer> idAuthors = new ArrayList<>();
-            List<Integer> idDocuments = new ArrayList<>();
-            try (Statement statement = connection.createStatement();
-                 ResultSet resultSet = statement.executeQuery("select d.ID, a.ID " +
-                         "from DOCUMENTS d, AUTHORS a")) {
-                while (resultSet.next()) {
-                    idAuthors.add(resultSet.getInt("a.ID"));
-                    idDocuments.add(resultSet.getInt("d.ID"));
+            Document checkDocument = null;
+            try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT * FROM DOCUMENTS " +
+                    "WHERE ID = ?")) {
+                preparedStatement.setInt(1, doc.getDocument_id());
+
+                try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                    while (resultSet.next()) {
+                        checkDocument = new Document(resultSet.getInt("ID"),
+                                resultSet.getString("TITLE"), resultSet.getString("TEXT"),
+                                resultSet.getInt("AUTHOR_ID"));
+                    }
                 }
             }
-            if (!idAuthors.contains(author.getAuthor_id()))
-                throw new DocumentException("The author with this id is not saved in the database");
 
-            if (!idDocuments.contains(doc.getDocument_id())) {
+            if (checkDocument == null) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO DOCUMENTS " +
                         "(ID, TITLE, TEXT, DATE_CREATION, AUTHOR_ID) " +
                         "VALUES (?, ?, ?, default, ?) ")) {
@@ -125,21 +133,21 @@ public class DbServer implements IDbService {
                     return true;
                 }
             }
-            Document document;
-            try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT ID, TITLE, TEXT, DATE_CREATION, AUTHOR_ID " +
-                    "FROM DOCUMENTS " +
-                    "WHERE ID = ?")) {
-                preparedStatement.setInt(1, doc.getDocument_id());
-                try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                    resultSet.next();
-                    document = new Document(resultSet.getInt(1), resultSet.getString(2), resultSet.getString(3),
-                            resultSet.getDate(4), resultSet.getInt(5));
+            if (checkDocument.equals(doc)) {
+                if (checkDocument.getText().equals(doc.getText())) {
+                    throw new DocumentException("The fields of the author object are filled in incorrectly");
                 }
-            }
-            if (document.equals(doc)) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement("UPDATE DOCUMENTS " +
                         "SET TEXT = ?, DATE_CREATION = default WHERE ID = ?")) {
                     preparedStatement.setString(1, doc.getText());
+                    preparedStatement.setInt(2, doc.getDocument_id());
+                    preparedStatement.executeUpdate();
+                    return false;
+                }
+            } else if (!checkDocument.getTitle().equals(doc.getTitle())) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement("UPDATE DOCUMENTS " +
+                        "SET TITLE = ?, DATE_CREATION = default WHERE ID = ?")) {
+                    preparedStatement.setString(1, doc.getTitle());
                     preparedStatement.setInt(2, doc.getDocument_id());
                     preparedStatement.executeUpdate();
                     return false;
@@ -300,15 +308,21 @@ public class DbServer implements IDbService {
 
     private static boolean searchAndDeleteAuthorById(int id) throws DocumentException {
         try (Connection connection = DriverManager.getConnection(dbURL, dbUserName, dbPassword)) {
-            List<Integer> idList = new ArrayList<>();
-            try (Statement statement = connection.createStatement();
-                 ResultSet resultSet = statement.executeQuery("SELECT ID FROM AUTHORS")) {
-                while (resultSet.next()) {
-                    idList.add(resultSet.getInt("ID"));
+            Author checkingAuthor = null;
+            try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT * FROM AUTHORS " +
+                    "WHERE ID = ?")) {
+                preparedStatement.setInt(1, id);
+
+                try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                    while (resultSet.next()) {
+                        checkingAuthor = new Author(resultSet.getInt("ID"),
+                                resultSet.getString("AUTHOR_NAME"),
+                                resultSet.getString("NOTES"));
+                    }
                 }
             }
 
-            if (idList.contains(id)) {
+            if (checkingAuthor != null) {
                 try (PreparedStatement preparedStatement = connection.prepareStatement("DELETE D.*, A.* " +
                         "FROM DOCUMENTS D , AUTHORS A " +
                         "WHERE D.AUTHOR_ID = ?" +
@@ -326,4 +340,5 @@ public class DbServer implements IDbService {
             throw new DocumentException(e.toString());
         }
     }
+
 }
